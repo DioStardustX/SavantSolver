@@ -35,7 +35,9 @@ app.use(ErrorMiddleware.handleError);
 //Acceso a las imágenes
 
 
-app.listen(port, () => {
-  console.log(`http://localhost:${port}`);
-  console.log('Presione CTRL-C para deternerlo\n');
+const PORT = Number(process.env.PORT) || 8080;
+
+app.listen(PORT, () => {
+  console.log(`Servidor escuchando en puerto ${PORT}`);
 });
+
