@@ -1,0 +1,2 @@
+powershellgit config --global user.name "DiostardustX"
+git config --global user.email "bnunezmurillo@gmail.com"

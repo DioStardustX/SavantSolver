@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+//Modelos
+model Usuario {
+  id       Int     @id @default(autoincrement())
+  email    String  @unique
+  nombre   String? //Puede ser nulo
+  role     Role    @default(USER)
+  password String
+  ordenes  Orden[]
+}
+
+model Videojuego {
+  id          Int                    @id @default(autoincrement())
+  nombre      String
+  descripcion String                 @db.VarChar(500)
+  publicar    Boolean                @default(true)
+  precio      Decimal                @db.Decimal(10, 2)
+  imagen      String                 @default("image-not-found.jpg")
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @default(now()) @updatedAt
+  generos     Genero[]
+  ordenes     OrdenVideojuego[]
+  plataformas PlataformaVideojuego[]
+}
+
+model Genero {
+  id          Int          @id @default(autoincrement())
+  nombre      String
+  updatedAt   DateTime     @default(now()) @updatedAt
+  videojuegos Videojuego[]
+}
+
+model Plataforma {
+  id          Int                    @id @default(autoincrement())
+  nombre      String
+  updatedAt   DateTime               @default(now()) @updatedAt
+  videojuegos PlataformaVideojuego[]
+}
+
+model PlataformaVideojuego {
+  //Plataforma
+  plataformaId     Int
+  plataforma       Plataforma @relation(fields: [plataformaId], references: [id])
+  //Videojuego
+  videojuegoId     Int
+  videojuego       Videojuego @relation(fields: [videojuegoId], references: [id])
+  anno_lanzamiento Int
+  updatedAt        DateTime   @default(now()) @updatedAt
+
+  //Llave primaria compuesta
+  @@id([plataformaId, videojuegoId])
+}
+
+model Orden {
+  id          Int               @id @default(autoincrement())
+  fechaOrden  DateTime          @default(now())
+  usuarioId   Int
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
+  videojuegos OrdenVideojuego[]
+}
+
+model OrdenVideojuego {
+  //Orden
+  ordenId      Int
+  orden        Orden      @relation(fields: [ordenId], references: [id])
+  //Videojuego
+  videojuegoId Int
+  videojuego   Videojuego @relation(fields: [videojuegoId], references: [id])
+  cantidad     Int
+  updatedAt    DateTime   @default(now()) @updatedAt
+
+  //Llave primaria compuesta
+  @@id([ordenId, videojuegoId])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
