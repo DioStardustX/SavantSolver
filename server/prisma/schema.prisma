@@ -1,12 +1,10 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -14,81 +12,341 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//Modelos
-model Usuario {
-  id       Int     @id @default(autoincrement())
-  email    String  @unique
-  nombre   String? //Puede ser nulo
-  role     Role    @default(USER)
-  password String
-  ordenes  Orden[]
+// ============================================================
+// 1. ROLES Y USUARIOS
+// ============================================================
+
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique @db.VarChar(50)
+  users User[]
 }
 
-model Videojuego {
-  id          Int                    @id @default(autoincrement())
-  nombre      String
-  descripcion String                 @db.VarChar(500)
-  publicar    Boolean                @default(true)
-  precio      Decimal                @db.Decimal(10, 2)
-  imagen      String                 @default("image-not-found.jpg")
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @default(now()) @updatedAt
-  generos     Genero[]
-  ordenes     OrdenVideojuego[]
-  plataformas PlataformaVideojuego[]
+model User {
+  id            Int       @id @default(autoincrement())
+  roleId        Int       @map("role_id")
+  email         String    @unique @db.VarChar(100)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  firstName     String    @map("first_name") @db.VarChar(100)
+  lastName      String    @map("last_name") @db.VarChar(100)
+  phone         String?   @db.VarChar(20)
+  documentId    String?   @map("document_id") @db.VarChar(50)
+  lastLogin     DateTime? @map("last_login")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  workload      Int?
+  status        UserStatus?
+
+  role                     Role                   @relation(fields: [roleId], references: [id])
+  ticketsCreated           Ticket[]               @relation("UserTickets")
+  ticketsAssigned          Ticket[]               @relation("AssignedTechnician")
+  specialties              TechnicianSpecialty[]
+  ticketHistory            TicketHistory[]
+  notificationsReceived    Notification[]         @relation("RecipientNotifications")
+  notificationsSent        Notification[]         @relation("SenderNotifications")
+  valuations               Valuation[]
+  assignments              Assignment[]
+
+  @@map("users")
 }
 
-model Genero {
-  id          Int          @id @default(autoincrement())
-  nombre      String
-  updatedAt   DateTime     @default(now()) @updatedAt
-  videojuegos Videojuego[]
+enum UserStatus {
+  Disponible      @map("Disponible")
+  No_Disponible   @map("No Disponible")
+
+  @@map("user_status")
 }
 
-model Plataforma {
-  id          Int                    @id @default(autoincrement())
-  nombre      String
-  updatedAt   DateTime               @default(now()) @updatedAt
-  videojuegos PlataformaVideojuego[]
+// ============================================================
+// 2. ESPECIALIDADES Y TÉCNICOS
+// ============================================================
+
+model Specialty {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+
+  technicians         TechnicianSpecialty[]
+  categories          CategorySpecialty[]
+  autoTriageRules     AutoTriageRule[]
+
+  @@map("specialties")
 }
 
-model PlataformaVideojuego {
-  //Plataforma
-  plataformaId     Int
-  plataforma       Plataforma @relation(fields: [plataformaId], references: [id])
-  //Videojuego
-  videojuegoId     Int
-  videojuego       Videojuego @relation(fields: [videojuegoId], references: [id])
-  anno_lanzamiento Int
-  updatedAt        DateTime   @default(now()) @updatedAt
+model TechnicianSpecialty {
+  userId       Int @map("user_id")
+  specialtyId  Int @map("specialty_id")
 
-  //Llave primaria compuesta
-  @@id([plataformaId, videojuegoId])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty Specialty @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, specialtyId])
+  @@map("technician_specialty")
 }
 
-model Orden {
-  id          Int               @id @default(autoincrement())
-  fechaOrden  DateTime          @default(now())
-  usuarioId   Int
-  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
-  videojuegos OrdenVideojuego[]
+// ============================================================
+// 3. SLA
+// ============================================================
+
+model Sla {
+  id                     Int    @id @default(autoincrement())
+  name                   String @unique @db.VarChar(100)
+  responseTimeMinutes    Int    @map("response_time_minutes")
+  resolutionTimeMinutes  Int    @map("resolution_time_minutes")
+
+  categories Category[]
+
+  @@map("sla")
 }
 
-model OrdenVideojuego {
-  //Orden
-  ordenId      Int
-  orden        Orden      @relation(fields: [ordenId], references: [id])
-  //Videojuego
-  videojuegoId Int
-  videojuego   Videojuego @relation(fields: [videojuegoId], references: [id])
-  cantidad     Int
-  updatedAt    DateTime   @default(now()) @updatedAt
+// ============================================================
+// 4. CATEGORÍAS Y ETIQUETAS
+// ============================================================
 
-  //Llave primaria compuesta
-  @@id([ordenId, videojuegoId])
+model Category {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  description String? @db.Text
+  slaId       Int?    @map("sla_id")
+
+  sla         Sla?              @relation(fields: [slaId], references: [id])
+  tags        CategoryTag[]
+  specialties CategorySpecialty[]
+  tickets     Ticket[]
+
+  @@map("categories")
 }
 
-enum Role {
-  USER
-  ADMIN
+model Tag {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  description String? @db.Text
+
+  categories CategoryTag[]
+
+  @@map("tags")
+}
+
+model CategoryTag {
+  categoryId Int @map("category_id")
+  tagId      Int @map("tag_id")
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, tagId])
+  @@map("category_tag")
+}
+
+model CategorySpecialty {
+  categoryId   Int @map("category_id")
+  specialtyId  Int @map("specialty_id")
+
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  specialty Specialty @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, specialtyId])
+  @@map("category_specialty")
+}
+
+// ============================================================
+// 5. TICKETS
+// ============================================================
+
+model Ticket {
+  id                    Int            @id @default(autoincrement())
+  title                 String         @db.VarChar(200)
+  description           String?        @db.Text
+  createdAt             DateTime       @default(now()) @map("created_at")
+  firstResponseAt       DateTime?      @map("first_response_at")
+  closedAt              DateTime?      @map("closed_at")
+  status                TicketStatus   @default(Pendiente)
+  priority              TicketPriority @default(Media)
+  userId                Int            @map("user_id")
+  categoryId            Int            @map("category_id")
+  assignedTechnicianId  Int?           @map("assigned_technician_id")
+  responseDeadline      DateTime?      @map("response_deadline")
+  resolutionDeadline    DateTime?      @map("resolution_deadline")
+  responseCompliance    Boolean?       @map("response_compliance")
+  resolutionCompliance  Boolean?       @map("resolution_compliance")
+
+  user               User             @relation("UserTickets", fields: [userId], references: [id])
+  category           Category         @relation(fields: [categoryId], references: [id])
+  assignedTechnician User?            @relation("AssignedTechnician", fields: [assignedTechnicianId], references: [id])
+  images             TicketImage[]
+  history            TicketHistory[]
+  assignments        Assignment[]
+  notifications      Notification[]
+  valuations         Valuation[]
+
+  @@map("tickets")
+}
+
+enum TicketStatus {
+  Pendiente   @map("Pendiente")
+  Asignado    @map("Asignado")
+  En_Proceso  @map("En Proceso")
+  Resuelto    @map("Resuelto")
+  Cerrado     @map("Cerrado")
+
+  @@map("ticket_status")
+}
+
+enum TicketPriority {
+  Baja  @map("Baja")
+  Media @map("Media")
+  Alta  @map("Alta")
+
+  @@map("ticket_priority")
+}
+
+model TicketImage {
+  id         Int      @id @default(autoincrement())
+  ticketId   Int      @map("ticket_id")
+  imagePath  String   @map("image_path") @db.MediumText
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_images")
+}
+
+// ============================================================
+// 6. HISTORIAL DE ESTADOS
+// ============================================================
+
+model TicketHistory {
+  id             Int           @id @default(autoincrement())
+  ticketId       Int           @map("ticket_id")
+  previousStatus TicketStatus? @map("previous_status")
+  newStatus      TicketStatus  @map("new_status")
+  changedAt      DateTime      @default(now()) @map("changed_at")
+  userId         Int           @map("user_id")
+  comment        String?       @db.Text
+  justification  String?       @db.Text
+
+  ticket Ticket                @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User                  @relation(fields: [userId], references: [id])
+  images HistoryStateImage[]
+
+  @@map("ticket_history")
+}
+
+model HistoryStateImage {
+  id             Int      @id @default(autoincrement())
+  historyStateId Int      @map("history_state_id")
+  imagePath      String   @map("image_path") @db.MediumText
+  uploadedAt     DateTime @default(now()) @map("uploaded_at")
+
+  historyState TicketHistory @relation(fields: [historyStateId], references: [id], onDelete: Cascade)
+
+  @@map("history_state_images")
+}
+
+// ============================================================
+// 7. REGLAS DE AUTO-TRIAGE
+// ============================================================
+
+model AutoTriageRule {
+  id                    Int                 @id @default(autoincrement())
+  name                  String              @db.VarChar(100)
+  description           String?             @db.Text
+  active                Boolean             @default(true)
+  remainingTimeMinutes  Int                 @default(0) @map("remaining_time_minutes")
+  workloadLimit         Int                 @default(0) @map("workload_limit")
+  specialtyId           Int?                @map("specialty_id")
+  priorityRule          AutoTriagePriority? @default(Media) @map("priority_rule")
+
+  specialty   Specialty?    @relation(fields: [specialtyId], references: [id])
+  assignments Assignment[]
+
+  @@map("auto_triage_rules")
+}
+
+enum AutoTriagePriority {
+  Baja    @map("Baja")
+  Media   @map("Media")
+  Alta    @map("Alta")
+  Urgente @map("Urgente")
+
+  @@map("auto_triage_priority")
+}
+
+// ============================================================
+// 8. ASIGNACIONES DE TICKETS
+// ============================================================
+
+model Assignment {
+  id                Int              @id @default(autoincrement())
+  ticketId          Int              @map("ticket_id")
+  technicianId      Int              @map("technician_id")
+  method            AssignmentMethod
+  assignedAt        DateTime         @default(now()) @map("assigned_at")
+  autoTriageRuleId  Int?             @map("auto_triage_rule_id")
+  priorityScore     Int              @default(0) @map("priority_score")
+  observation       String?          @db.Text
+
+  ticket         Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  technician     User            @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  autoTriageRule AutoTriageRule? @relation(fields: [autoTriageRuleId], references: [id])
+
+  @@map("assignments")
+}
+
+enum AssignmentMethod {
+  Automatico @map("Automatico")
+  Manual     @map("Manual")
+
+  @@map("assignment_method")
+}
+
+// ============================================================
+// 9. NOTIFICACIONES
+// ============================================================
+
+model Notification {
+  id                Int              @id @default(autoincrement())
+  recipientUserId   Int              @map("recipient_user_id")
+  senderUserId      Int?             @map("sender_user_id")
+  ticketId          Int?             @map("ticket_id")
+  type              NotificationType
+  message           String           @db.Text
+  createdAt         DateTime         @default(now()) @map("created_at")
+  isRead            Boolean          @default(false) @map("is_read")
+  readAt            DateTime?        @map("read_at")
+  systemGenerated   Boolean          @default(false) @map("system_generated")
+
+  recipient User    @relation("RecipientNotifications", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  sender    User?   @relation("SenderNotifications", fields: [senderUserId], references: [id], onDelete: SetNull)
+  ticket    Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  Asignacion        @map("Asignacion")
+  CambioEstado      @map("CambioEstado")
+  NuevaObservacion  @map("NuevaObservacion")
+  InicioSesion      @map("InicioSesion")
+  Otro              @map("Otro")
+
+  @@map("notification_type")
+}
+
+// ============================================================
+// 10. VALORACIONES
+// ============================================================
+
+model Valuation {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int      @map("ticket_id")
+  userId    Int      @map("user_id")
+  rating    Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, userId])
+  @@map("valuations")
 }

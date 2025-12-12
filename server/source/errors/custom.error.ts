@@ -22,7 +22,7 @@ export class AppError extends Error {
   constructor(args: AppErrorArgs) {
     const { message, name, statusCode, isOperational, validationErrors } = args;
     super(message);
-    Object.setPrototypeOf(this, new.target.prototype); 
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = name ?? "Error en la aplicacion";
     this.statusCode = statusCode;
     if (isOperational !== undefined) this.isOperational = isOperational;
@@ -30,7 +30,7 @@ export class AppError extends Error {
     Error.captureStackTrace(this);
   }
 
-  static badRequest( 
+  static badRequest(
     message: string,
     validationErrors?: ValidationType[]
   ): AppError {
