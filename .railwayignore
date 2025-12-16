@@ -1,0 +1,10 @@
+# Dependencias
+**/node_modules
+
+# Builds locales
+**/dist
+**/.angular
+**/.cache
+
+# Frontend (no se deploya en el backend)
+savantsolver/
